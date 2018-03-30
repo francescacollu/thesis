@@ -1,0 +1,172 @@
+//Corner Space Renormalization Method (CSRM)
+//L'operatore liouvilliano è inteso nella forma:
+//L = (i h+ - gamma*0.5 * transC * C*) kron 1 + 1 kron (-i h - gamma*0.5 * C+ * C) + gamma*0.5 (C* kron C).
+
+//Il sistema considerato è una catena di Ising unidimensionale.
+
+#include <iostream>
+#include <armadillo>
+#include <iomanip>
+#include <complex>
+
+using namespace std;
+using namespace arma;
+
+int main() {
+    
+    double gamma = 1.;
+    double Delta = 0.;
+    int Niter = 5;
+    int M = 3;
+    
+    //identity matrix
+    cx_mat BlockI;
+    BlockI << cx_double(1., 0.) << cx_double(0., 0.) << endr << cx_double(0., 0.) << cx_double(1., 0.) << endr;
+    
+    //definition of the imaginary unit
+    cx_double ii = cx_double(0., 1.);
+    
+    //annihilation operator b's definition (fermionic case)
+    cx_mat b, BlockC;
+    b << cx_double(0., 0.) << cx_double(1., 0.) << endr << cx_double(0., 0.) << cx_double(0., 0.) << endr;
+    BlockC = b;
+    
+    //definition of the hamiltonian
+    cx_mat Sz, Sp, Sm;
+    Sz << cx_double(0.5, 0.) << cx_double(0., 0.) << endr << cx_double(0., 0.) << cx_double(-0.5, 0.) << endr;
+    Sp << cx_double(0., 0.) << cx_double(0., 0.) << endr << cx_double(1., 0.) << cx_double(0., 0.) << endr;
+    Sm << cx_double(0., 0.) << cx_double(1., 0.) << endr << cx_double(0., 0.) << cx_double(0., 0.) << endr;
+    
+    cx_mat BlockSz = Sz;
+    cx_mat BlockSp = Sp;
+    cx_mat BlockSm = Sm;
+    
+    cx_mat BlockH, H;
+    BlockH << cx_double(0., 0.) << cx_double(0., 0.) << endr << cx_double(0., 0.) << cx_double(0., 0.) << endr;
+    
+    for (int i = 1; i < Niter+1; i++)
+    {
+        //jumps operator's C definition
+        cx_mat C = gamma * (kron(BlockC, BlockI) + kron(BlockI, BlockC));
+        
+        H = kron(BlockH, BlockI) + kron(BlockI, BlockH) - Delta * kron(BlockSz, BlockSz) + 0. *(kron(BlockSp, BlockSm) + kron(BlockSm, BlockSp));
+        H = 0.5 * (H + trans(H));
+        
+        //operatore liouvilliano: definito con una vettorizzazione con ordine per colonne (utilizzata da Armadillo)
+        cx_mat first, second, third;
+        cx_mat L;
+        
+        first = ii * trans(H) - gamma*0.5 * trans(C) * conj(C);
+        first = kron(first, BlockI);
+        second = -ii * H - gamma*0.5 * trans(C) * C;
+        second = kron(BlockI, second);
+        third = gamma * kron(conj(C), C);
+        
+        L = kron(first, BlockI) + kron(BlockI, second) + third;
+        cout << "L = " << L.n_rows << " x " << L.n_cols << endl;
+        
+        cx_vec Spectrum; //vettore costituito dagli autovalori di L
+        cx_mat Evect; //matrice costituita dagli autovettori di L
+        
+        eig_gen(Spectrum, Evect, L);
+        
+        cout << Spectrum << endl;
+        //cout << Evect << endl;
+        cout << "GS energy at " << i << "th step : " << real(Spectrum[0]) << endl;
+        
+        int SpectrumRows;
+        SpectrumRows = Spectrum.n_rows;
+        
+        cx_vec ro_ss; //ro_ss è l'autovettore corrispondente all'autovalore nullo
+        cx_mat ro; //matrice ottenuta dalla matricializzazione di ro_ss
+        int dim_ro, dim_ro_ss;
+        cx_mat dm;
+        
+        //for (int n=0; n< SpectrumRows + 1; n++)
+        //{
+        //    if (Spectrum[n] == cx_double(0., 0.))
+         //   {
+                ro_ss = Evect.col(0);
+                
+                dim_ro = sqrt(L.n_rows); //le dimensioni di L sono sempre quadrati, provenendo questo dal prodotto kron(C,C), per esempio
+                dim_ro_ss = ro_ss.n_rows;
+                ro = reshape(ro_ss, dim_ro, dim_ro); //verificare la coerenza nella vettorizzazione: dovrebbe essere coerente, perché ora abbiamo vettorizzato con ordinamento per colonne; reshape attua anch'esso ordinamento per colonne.
+                cout << "Tr(ro) = " << trace (ro) << endl;
+                if (trace(ro) == 1.)
+                {
+                    dm = ro;
+                    cout << "ro is a density matrix (dm)." << endl;
+                    cout << ro << endl;
+                }
+           // }
+        //}
+        
+        //cout << "ro_ss = " << ro_ss.n_rows << " x " << ro_ss.n_cols << endl;
+        
+        cout << "dm = " << dm.n_rows << " x " << dm.n_cols << endl;
+        
+        vec eigValRo;
+        cx_mat eigVecRo;
+        eig_sym(eigValRo, eigVecRo, dm);
+        
+        vec lambdaVec;
+        cx_mat eigVecNew;
+        
+        
+        //costruzione della base in A U B
+        lambdaVec = kron(eigValRo, eigValRo); //vettore colonna del prodotto degli autovalori di ro(A) e ro(B); gli autovalori sono storati in ordine ascendente
+        eigVecNew = kron(eigVecRo, eigVecRo); //matrice del prodotto degli autovettori di ro(A) e ro(B)
+        
+        
+        //Di seguito si usa il comando .tail(M) e .tail_cols(M) per troncare vettori e matrici prendendone gli ultimi M elementi e M colonne, rispettivamente; viene fatto perché la libreria Armadillo ordina gli autovalori in ordine crescente e noi vogliamo tenere gli stati con probabilità maggiore.
+        vec eigValNew;
+        cx_mat Omatr;
+        int Nkeep, eigVecCols;
+        
+        eigVecCols = eigVecNew.n_cols;
+        
+        Nkeep = min(eigVecCols, M);
+        eigValNew = lambdaVec.tail(Nkeep);
+        Omatr = eigVecNew.tail_cols(Nkeep);
+        
+        cout << "O = " << Omatr.n_rows << " x " << Omatr.n_cols << endl;
+        
+        //A questo punto rinormalizziamo l'hamiltoniana e i jump operators
+        BlockH = H;
+            cout << "BlockH = " << BlockH.n_rows << " x " << BlockH.n_cols << endl;
+        BlockSz = kron(BlockI, BlockSz); //? dovrei aggiungere il termine kron(BlockSz, BlockI)???
+            cout << "BlockSz = " << BlockSz.n_rows << " x " << BlockSz.n_cols << endl;
+        BlockSp = kron(BlockI, BlockSp); //?
+            cout << "BlockSp = " << BlockSp.n_rows << " x " << BlockSp.n_cols << endl;
+        BlockSm = kron(BlockI, BlockSm); //?
+            cout << "BlockSm = " << BlockSm.n_rows << " x " << BlockSm.n_cols << endl;
+        BlockI = kron(BlockI, BlockI); //?
+            cout << "BlockI = " << BlockI.n_rows << " x " << BlockI.n_cols << endl;
+        BlockH = kron(BlockI, BlockH) + kron(BlockH, BlockI) + 0.5*(kron(BlockSm, BlockSp) + kron(BlockSp, BlockSm));
+            cout << "BlockH = " << BlockH.n_rows << " x " << BlockH.n_cols << endl;
+        BlockC = kron(BlockI, C) + kron(C, BlockI); //!!!!!che differenza c'è tra C e BlockC?!?!?!?!?!
+            cout << "C = " << C.n_rows << " x " << C.n_cols << endl;
+        
+        BlockH = trans(Omatr)*BlockH*Omatr;
+            cout << "BlockH = " << BlockH.n_rows << " x " << BlockH.n_cols << endl;
+        BlockSz = kron(BlockI, BlockSz);
+        BlockSz = trans(Omatr)*BlockSz*Omatr;
+            cout << "BlockSz = " << BlockSz.n_rows << " x " << BlockSz.n_cols << endl;
+        BlockSp = kron(BlockI, BlockSp);
+        BlockSp = trans(Omatr)*BlockSp*Omatr;
+            cout << "BlockSp = " << BlockSp.n_rows << " x " << BlockSp.n_cols << endl;
+        BlockSm = kron(BlockI, BlockSm);
+        BlockSm = trans(Omatr)*BlockSm*Omatr;
+            cout << "BlockSm = " << BlockSm.n_rows << " x " << BlockSm.n_cols << endl;
+        
+        BlockC = trans(Omatr)*BlockC*Omatr;
+            cout << "C = " << C.n_rows << " x " << C.n_cols << endl;
+        BlockI = kron(BlockI, BlockI);
+            cout << "BlockI = " << BlockI.n_rows << " x " << BlockI.n_cols << endl;
+        BlockI = trans(Omatr)*BlockI*Omatr;
+            cout << "BlockI = " << BlockI.n_rows << " x " << BlockI.n_cols << endl;
+    }
+    
+    
+    return 0;
+}
