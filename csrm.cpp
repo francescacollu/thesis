@@ -14,7 +14,7 @@ int main() {
     double gamma = 1.;
     double Delta = 0.;
     int Niter = 4;
-    int M = 10;
+    int M = 16;
     
     //identity matrix
     cx_mat BlockI, I;
