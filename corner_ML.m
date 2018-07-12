@@ -3,7 +3,7 @@
 
 gamma = 1.;
 Delta = 0.;
-Niter = 3;
+Niter = 2;
 M = 17;
 
 %for M = 4:+4:44
@@ -20,7 +20,7 @@ M = 17;
     BlockSydx = Sy;
 
     %jump operator
-    b = [0 0; 2 0];
+    b = [0 0; 1 0];
     C = b;
 
     BlockH = zeros(2);
@@ -68,11 +68,12 @@ M = 17;
         H = kron(BlockH, BlockI) + kron(BlockI, BlockH) - kron(BlockSxsx, BlockSxdx) ...
         - 0.5 * (kron(BlockSysx, BlockSydx));
 
+        C = kron(C, BlockI) + kron(BlockI, C);
+        
         BlockSxsx = kron(BlockI, BlockSxsx);
         BlockSxdx = kron(BlockSxdx, BlockI);
         BlockSysx = kron(BlockI, BlockSysx);
         BlockSydx = kron(BlockSydx, BlockI);
-        C = kron(C, BlockI) + kron(BlockI, C);
         BlockSz = kron(BlockI, BlockSz);
         BlockI = kron(BlockI, BlockI);
 
