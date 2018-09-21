@@ -1,4 +1,6 @@
-//prova di diagonalizzazione dell'operatore di Lindblad
+//prova di diagonalizzazione dell'operatore di Lindblad - 4 siti
+
+//questo codice ha qualcosa di sbagliato: il valore di aspettazione dovrebbe essere reale (?) e qua non lo è.
 
 #include <iostream>
 #include <armadillo>
@@ -22,7 +24,7 @@ int main() {
     
     //annihilation operator
     cx_mat b;
-    b << cx_double(0., 0.) << cx_double(0., 0.) << endr << cx_double(2., 0.) << cx_double(0., 0.) << endr;
+    b << cx_double(0., 0.) << cx_double(0., 0.) << endr << cx_double(1., 0.) << cx_double(0., 0.) << endr;
     
     //Pauli matrices
     cx_mat Sx, Sy, Sz;
@@ -30,27 +32,32 @@ int main() {
     Sy << cx_double(0., 0.) << cx_double(0., -1.) << endr << cx_double(0., 1.) << cx_double(0., 0.) << endr;
     Sz << cx_double(1., 0.) << cx_double(0., 0.) << endr << cx_double(0, 0.) << cx_double(-1., 0.) << endr;
     
-    cx_mat H, C, L, I, first, second, third;
+    cx_mat H, C1, C2, C3, C4, L, I, first, second, third;
     
-    H = - kron(Sx, kron(Sx, kron(BlockI, BlockI))) - kron(BlockI, kron(Sx, kron(Sx, BlockI))) - kron(BlockI, kron(BlockI, kron(Sx, Sx))) - 0.5* (kron(Sy, kron(Sy, kron(BlockI, BlockI))) +  kron(BlockI, kron(Sy, kron(Sy, BlockI))) + kron(BlockI, kron(BlockI, kron(Sy, Sy))));
+    H = - kron(Sx, kron(Sx, kron(BlockI, BlockI))) - kron(BlockI, kron(Sx, kron(Sx, BlockI))) - kron(BlockI, kron(BlockI, kron(Sx, Sx))) - 0.5 * (kron(Sy, kron(Sy, kron(BlockI, BlockI))) +  kron(BlockI, kron(Sy, kron(Sy, BlockI))) + kron(BlockI, kron(BlockI, kron(Sy, Sy))));
     
-    C = kron(b, kron(BlockI, kron(BlockI, BlockI))) + kron(BlockI, kron(b, kron(BlockI, BlockI))) + kron(BlockI, kron(BlockI, kron(b, BlockI))) + kron(BlockI, kron(BlockI, kron(BlockI, b)));
+    C1 = kron(b, kron(BlockI, kron(BlockI, BlockI)));
+    C2 = kron(BlockI, kron(b, kron(BlockI, BlockI)));
+    C3 = kron(BlockI, kron(BlockI, kron(b, BlockI)));
+    C4 = kron(BlockI, kron(BlockI, kron(BlockI, b)));
     
     I = kron(BlockI, kron(BlockI, kron(BlockI, BlockI)));
     
-    first = ii * H.st() - 0.5 * gamma * C.st() * conj(C);
-    second = - ii * H - 0.5 * gamma * trans(C) * C;
-    third = kron(conj(C), C);
+    first = ii * H.st() - 0.5 * gamma * C1.st() * conj(C1)- 0.5 * gamma * C2.st() * conj(C2)- 0.5 * gamma * C3.st() * conj(C3)- 0.5 * gamma * C4.st() * conj(C4);
+    second = - ii * H - 0.5 * gamma * trans(C1) * C1 - 0.5 * gamma * trans(C2) * C2 - 0.5 * gamma * trans(C3) * C3- 0.5 * gamma * trans(C4) * C4;
+    third = kron(conj(C1), C1) + kron(conj(C2), C2) + kron(conj(C3), C3) + kron(conj(C4), C4);
     
-    L = kron(first, I) + kron(I, second) + gamma * third;
+    L = kron(first, I) + kron(I, second) + gamma*third;
     
     cx_vec Spectrum; //vettore costituito dagli autovalori di L
     cx_mat Evect;
 
     eig_gen(Spectrum, Evect, L);
     
-    Spectrum = sort(Spectrum);
+    cx_vec SortedSpectrum = sort(Spectrum);
     uvec indicesSpectrum = sort_index(Spectrum);
+    
+    cout << fixed << setprecision(10) << SortedSpectrum << endl;
     
     cx_mat EvectSorted;
     EvectSorted =  Evect.cols(indicesSpectrum);
@@ -63,42 +70,13 @@ int main() {
     rho_ss = EvectSorted.col(0);
     dm = reshape(rho_ss, sqrt(Lrows), sqrt(Lrows));
     
-    cout << "Tr(p) = " << trace(dm) << endl;
+    cout << "La traccia di dm è " << trace(dm) << endl;
     
-    cx_vec spectrumDM;
-    cx_mat eigenvecDM;
-    
-    eig_gen(spectrumDM, eigenvecDM, dm);
-    
-    cout << "Autovalori di p:" << endl << spectrumDM << endl;
-    
-    cx_double sum = cx_double(0., 0.);
-    for(int k=0; k<spectrumDM.n_rows; k++)
-    {
-        sum = sum + spectrumDM[k];
-    }
-    
-    cout << "Somma(lambda_i) = " << sum << endl;
-    
-    cx_mat dmT;
-    dmT = trans(dm);
-    
-    bool equal;
-    equal = approx_equal(dmT, dm, "absdiff", 1.E-14);
-    if(equal) {cout << "p è hermitiana." << endl;}
+    dm = dm/trace(dm);
+    cout << "La traccia di dm (giusta) è " << trace(dm) << endl;
     
     cx_mat SigmaZ;
     SigmaZ = kron(kron(Sz, BlockI), kron(BlockI, BlockI));
-    
     cout << "Tr(p*SigmaZ) = " << trace(dm*SigmaZ) << endl;
-    
-    double SpectrumRows = Spectrum.n_rows;
-    ofstream myfile ("L_prova.dat");
-    
-    for(int j=0; j<SpectrumRows; j++)
-    {
-        myfile << fixed << std::scientific << real(Spectrum[j]) << "\t" << imag(Spectrum[j]) << endl;
-    }
-    
     return 0;
 }
